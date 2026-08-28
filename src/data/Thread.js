@@ -9,7 +9,9 @@ const attachments = require("./attachments");
 const { formatters } = require("../formatters");
 const { sanitiseEmbedsForMetadata } = require("../embedLogging");
 const { callBeforeNewMessageReceivedHooks } = require("../hooks/beforeNewMessageReceived");
+const { callBeforeThreadCloseHooks } = require("../hooks/beforeThreadClose");
 const { callAfterNewMessageReceivedHooks } = require("../hooks/afterNewMessageReceived");
+const { callAfterStaffReplyHooks } = require("../hooks/afterStaffReply");
 const { callAfterThreadCloseHooks } = require("../hooks/afterThreadClose");
 const { callAfterThreadCloseScheduledHooks } = require("../hooks/afterThreadCloseScheduled");
 const { callAfterThreadCloseScheduleCanceledHooks } = require("../hooks/afterThreadCloseScheduleCanceled");
@@ -18,7 +20,7 @@ const { getModeratorThreadDisplayRoleName } = require("./displayRoles");
 
 const ThreadMessage = require("./ThreadMessage");
 
-const {THREAD_MESSAGE_TYPE, THREAD_STATUS, DISCORD_MESSAGE_ACTIVITY_TYPES} = require("./constants");
+const {THREAD_MESSAGE_TYPE, THREAD_STATUS, THREAD_CLOSURE_REASON, DISCORD_MESSAGE_ACTIVITY_TYPES} = require("./constants");
 const {isBlocked} = require("./blocked");
 const {messageContentToAdvancedMessageContent} = require("../utils");
 
@@ -101,7 +103,7 @@ class Thread {
       const textContent = typeof content === "string" ? content : content.content;
       const contentObj = typeof content === "string" ? {} : content;
       if (textContent) {
-   
+
         const chunks = utils.chunkMessageLines(textContent);
         for (const [i, chunk] of chunks.entries()) {
           const msg = (i === chunks.length - 1)
@@ -119,7 +121,7 @@ class Thread {
       // Channel not found
       if (e.code === 10003) {
         console.log(`[INFO] Failed to send message to thread channel for ${this.user_name} because the channel no longer exists. Auto-closing the thread.`);
-        this.close(true);
+        this.close(THREAD_CLOSURE_REASON.CHANNEL_DELETED, null, true);
       } else if (e.code === 240000) {
         console.log(`[INFO] Failed to send message to thread channel for ${this.user_name} because the message contains a link blocked by the harmful links filter`);
         await bot.createMessage(this.channel_id, "Failed to send message to thread channel because the message contains a link blocked by the harmful links filter");
@@ -360,6 +362,12 @@ class Thread {
     if (config.autoAlert) {
       this._startAutoAlertTimer(moderator.id);
     }
+
+    await callAfterStaffReplyHooks({
+      moderator,
+      threadMessage,
+      thread: this
+    });
 
     return true;
   }
@@ -835,9 +843,30 @@ class Thread {
   }
 
   /**
+   * @param {Number} reason
+   * @param {string} [moderatorId]
    * @returns {Promise<void>}
    */
-  async close(suppressSystemMessage = false, silent = false) {
+  async close(reason, moderatorId, suppressSystemMessage = false, silent = false) {
+    let moderatorMember = null;
+    if (moderatorId != null) {
+      let guild = bot.guilds.get(this.guildID) ?? bot.getRESTGuild(this.guildID);
+      if (guild != null) {
+        moderatorMember = guild.getRESTMember(moderatorId);
+      }
+    }
+
+    let hookResult = await callBeforeThreadCloseHooks({
+      thread: this,
+      context: {
+        reason,
+        moderatorMember
+      }
+    });
+
+    // Cancel the closure, provided it wasn't caused by channel deletion.
+    if (reason != THREAD_CLOSURE_REASON.CHANNEL_DELETED && hookResult.cancelled) return;
+
     if (! suppressSystemMessage) {
       console.log(`Closing thread ${this.id}`);
 

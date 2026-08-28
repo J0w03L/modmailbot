@@ -5,7 +5,7 @@ const threads = require("../data/threads");
 const blocked = require("../data/blocked");
 const { messageQueue } = require("../queue");
 const { getLogUrl, getLogFile, getLogCustomResponse } = require("../data/logs");
-const {THREAD_MESSAGE_TYPE} = require("../data/constants");
+const {THREAD_MESSAGE_TYPE, THREAD_CLOSURE_REASON} = require("../data/constants");
 
 module.exports = ({ bot, knex, config, commands }) => {
   async function getMessagesAmounts(thread) {
@@ -74,7 +74,7 @@ module.exports = ({ bot, knex, config, commands }) => {
         await thread.sendSystemMessageToUser(closeMessage).catch(() => {});
       }
 
-      await thread.close(false, thread.scheduled_close_silent);
+      await thread.close(THREAD_CLOSURE_REASON.SCHEDULED, thread.scheduled_close_id, false, thread.scheduled_close_silent);
 
       await sendCloseNotification(thread, `Modmail thread #${thread.thread_number} with ${thread.user_name} (${thread.user_id}) was closed as scheduled by ${thread.scheduled_close_name}`);
     }
@@ -94,8 +94,8 @@ module.exports = ({ bot, knex, config, commands }) => {
 
   // Close a thread. Closing a thread saves a log of the channel's contents and then deletes the channel.
   commands.addGlobalCommand("close", "[opts...]", async (msg, args) => {
-    let thread, closedBy;
-
+    let thread, closedBy, reason;
+    let moderatorId = null;
     let hasCloseMessage = !! config.closeMessage;
     let silentClose = false;
     let suppressSystemMessages = false;
@@ -115,6 +115,7 @@ module.exports = ({ bot, knex, config, commands }) => {
         suppressSystemMessages = true;
       });
 
+      reason = THREAD_CLOSURE_REASON.USER;
       closedBy = "the user";
     } else {
       // A staff member is closing the thread
@@ -135,6 +136,8 @@ module.exports = ({ bot, knex, config, commands }) => {
 
         return;
       }
+
+      moderatorId = msg.member.id;
 
       // Silent close (= no close message)
       if (args.silent || opts.includes("silent") || opts.includes("s")) {
@@ -166,6 +169,7 @@ module.exports = ({ bot, knex, config, commands }) => {
       }
 
       // Regular close
+      reason = THREAD_CLOSURE_REASON.MODERATOR;
       closedBy = config.useDisplaynames ? msg.author.globalName || msg.author.username : msg.author.username;
     }
 
@@ -175,7 +179,7 @@ module.exports = ({ bot, knex, config, commands }) => {
       await thread.sendSystemMessageToUser(closeMessage).catch(() => {});
     }
 
-    await thread.close(suppressSystemMessages, silentClose);
+    await thread.close(reason, moderatorId, suppressSystemMessages, silentClose);
 
     await sendCloseNotification(thread, `Modmail thread #${thread.thread_number} with ${thread.user_name} (${thread.user_id}) was closed by ${closedBy} (${msg.author.id})`);
   }, {
@@ -199,7 +203,7 @@ module.exports = ({ bot, knex, config, commands }) => {
       await thread.sendSystemMessageToUser(closeMessage).catch(() => {});
     }
 
-    await thread.close(true);
+    await thread.close(THREAD_CLOSURE_REASON.CHANNEL_DELETED, null, true);
 
     await sendCloseNotification(thread, `Modmail thread #${thread.thread_number} with ${thread.user_name} (${thread.user_id}) was closed automatically because the channel was deleted`);
   });

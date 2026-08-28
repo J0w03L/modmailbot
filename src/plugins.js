@@ -2,7 +2,10 @@ const attachments = require("./data/attachments");
 const logs = require("./data/logs");
 const { beforeNewThread } = require("./hooks/beforeNewThread");
 const { beforeNewMessageReceived } = require("./hooks/beforeNewMessageReceived");
+const { beforeThreadClose } = require("./hooks/beforeThreadClose");
 const { afterNewMessageReceived } = require("./hooks/afterNewMessageReceived");
+const { afterStaffReply } = require("./hooks/afterStaffReply");
+const { afterNewThread } = require("./hooks/afterNewThread");
 const { afterThreadClose } = require("./hooks/afterThreadClose");
 const { afterThreadCloseScheduled } = require("./hooks/afterThreadCloseScheduled");
 const { afterThreadCloseScheduleCanceled } = require("./hooks/afterThreadCloseScheduleCanceled");
@@ -152,7 +155,10 @@ module.exports = {
       hooks: {
         beforeNewThread,
         beforeNewMessageReceived,
+        beforeThreadClose,
         afterNewMessageReceived,
+        afterStaffReply,
+        afterNewThread,
         afterThreadClose,
         afterThreadCloseScheduled,
         afterThreadCloseScheduleCanceled,

@@ -17,6 +17,13 @@ module.exports = {
     REPLY_DELETED: 9,
   },
 
+  THREAD_CLOSURE_REASON: {
+    USER: 1,
+    MODERATOR: 2,
+    SCHEDULED: 3,
+    CHANNEL_DELETED: 4,
+  },
+
   // https://discord.com/developers/docs/resources/channel#channel-object-channel-types
   DISCORD_CHANNEL_TYPES: {
     GUILD_TEXT: 0,

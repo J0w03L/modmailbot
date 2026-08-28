@@ -15,6 +15,7 @@ const updates = require("./updates");
 const Thread = require("./Thread");
 const ThreadMessage = require("./ThreadMessage");
 const {callBeforeNewThreadHooks} = require("../hooks/beforeNewThread");
+const {callAfterNewThreadHooks} = require("../hooks/afterNewThread");
 const {THREAD_STATUS, DISCORD_CHANNEL_TYPES} = require("./constants");
 const {findNotesByUserId} = require("./notes");
 
@@ -81,7 +82,7 @@ function getHeaderGuildInfo(member) {
  * @typedef CreateNewThreadForUserOpts
  * @property {boolean} [quiet] If true, doesn't ping mentionRole
  * @property {boolean} [ignoreRequirements] If true, creates a new thread even if the account doesn't meet requiredAccountAge
- * @property {boolean} [ignoreHooks] If true, doesn't call beforeNewThread hooks
+ * @property {boolean} [ignoreHooks] If true, doesn't call beforeNewThread/afterNewThread hooks
  * @property {Message} [message] Original DM message that is trying to start the thread, if there is one
  * @property {string} [categoryId] Category where to open the thread
  * @property {string} [source] A string identifying the source of the new thread
@@ -329,6 +330,15 @@ async function createNewThreadForUser(user, opts = {}) {
       if (availableUpdate) {
         await newThread.postNonLogMessage(`📣 New bot version available (${availableUpdate})`);
       }
+    }
+
+    if (! ignoreHooks) {
+      // Call any registered afterNewThreadHooks
+      await callAfterNewThreadHooks({
+        newThread,
+        user,
+        opts
+      });
     }
 
     // Return the thread
